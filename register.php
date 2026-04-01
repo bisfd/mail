@@ -69,7 +69,8 @@ curl_setopt_array($ch, [
         'Authorization: Bearer ' . $apiToken,
         'Content-Type: application/x-www-form-urlencoded'
     ],
-    CURLOPT_TIMEOUT => 30 // Таймаут 30 секунд
+    CURLOPT_TIMEOUT => 30, // Таймаут 30 секунд
+    CURLOPT_FOLLOWLOCATION => true // Следовать редиректам
 ]);
 
 // Выполняем запрос
@@ -83,9 +84,49 @@ curl_close($ch);
 if ($error) {
     $response['message'] = 'Ошибка подключения к API: ' . $error;
 } elseif ($httpCode !== 200) {
-    $response['message'] = 'Ошибка API: HTTP ' . $httpCode;
+    // Обрабатываем HTTP‑ошибки
+    switch ($httpCode) {
+        case 400:
+            $response['message'] = 'Неверные параметры запроса к API';
+            break;
+        case 401:
+            $response['message'] = 'Ошибка авторизации в API (проверьте токен)';
+            break;
+        case 403:
+            $response['message'] = 'Доступ к API запрещён';
+            break;
+        case 404:
+            $response['message'] = 'API endpoint не найден';
+            break;
+        case 500:
+            $response['message'] = 'Внутренняя ошибка сервера API';
+            break;
+        default:
+            $response['message'] = 'Ошибка API: HTTP ' . $httpCode;
+    }
 } else {
     // Предполагаем, что API возвращает JSON
     $apiData = json_decode($responseApi, true);
 
-    if ($apiData && isset($api
+    // Проверяем, удалось ли декодировать JSON
+    if ($apiData === null) {
+        $response['message'] = 'Некорректный ответ от API: ' . $responseApi;
+    } else {
+        // Анализируем ответ API
+        if (isset($apiData['result']) && $apiData['result'] === 'success') {
+            // Успешное создание почты
+            $response['success'] = true;
+            $response['message'] = 'Почта успешно создана';
+        } elseif (isset($apiData['error'])) {
+            // API вернуло конкретную ошибку
+            $response['message'] = 'Ошибка API: ' . $apiData['error'];
+        } else {
+            // Неизвестный формат ответа
+            $response['message'] = 'Неизвестный ответ от API';
+        }
+    }
+}
+
+// Выводим JSON‑ответ для JavaScript
+echo json_encode($response, JSON_UNESCAPED_UNICODE);
+?>
